@@ -1,0 +1,96 @@
+---
+# vars file for php
+_php_version: "7.4.13"
+_php_download_url: "https://www.php.net/distributions/php-{{ _php_version }}.tar.gz"
+
+# The php install way: network、file
+_php_install_way: "{% if env_install_way is defined %}{{ env_install_way }}{% else %}network{% endif %}"
+# The php configure file path
+_php_conf_paths: "/data/php/etc"
+# The php install path
+_php_source_install_path: "/data/php"
+_php_configurate_file: "{{ _php_source_install_path }}/etc/php.ini"
+# The php and php-extensions source make commands, eg: make -j 4
+_php_source_make_command: "make"
+# Whether create php symlink, default: /usr/bin/php
+_php_create_symlink: true
+# Whether install composer
+_php_install_composer: true
+# Whether enable php-fpm service
+_php_fpm_using_service: true
+
+# PHP Extension source code by: network、file
+_php_extensions_source_code: "{% if env_install_way is defined %}{{ env_install_way }}{% else %}network{% endif %}"
+# PHP Extension Install Way: dynamic、static
+_php_extensions_install_way: "dynamic"
+# PHP Extension force reinstall.
+#   The value is true to force install.
+#   The value is false to auto set.
+#   The filter to set extension name list.
+_php_extensions_force_update: false
+  #- imagick
+  #- mcrypt
+# PHP Extension Install Map List
+_php_extensions_list:
+  yaf:
+    version: "3.2.5"
+    configures:
+      - yaf.environ=product
+      - yaf.use_namespace=1
+  mcrypt:
+    version: "1.0.4"
+    depLibs:
+      - "libmcrypt-devel"
+  imagick:
+    version: "3.4.4"
+    depLibs:
+      - "ImageMagick-devel"
+  redis:
+    version: "5.3.2"
+  swoole:
+    depLibs:
+      - "gcc-c++"
+    version: "4.5.9"
+    staticConfigurate: "--enable-swoole --enable-http2 --with-openssl-dir=/usr/lib64"
+  inotify:
+    version: "3.0.0"
+  grpc:
+    version: "1.34.0"
+  yaml:
+    depLibs:
+      - "libyaml-devel"
+    version: "2.2.0"
+  oauth:
+    version: "2.0.7"
+
+# Use the premise: configure php enable --with-pear options
+#_php_pecl_install_extensions:
+  #- https://pecl.php.net/get/mcrypt-1.0.3.tgz
+  #- https://pecl.php.net/get/imagick-3.4.4.tgz
+
+# The php configre commands
+_php_source_configure_command: >
+  ./configure
+  --prefix={{ _php_source_install_path }}
+  --with-config-file-path={{ _php_conf_paths }}
+  --with-curl
+  --with-iconv
+  --with-mysqli=mysqlnd
+  --with-openssl
+  --with-pdo-mysql
+  --with-zlib
+  --enable-gd
+  --with-webp
+  --with-jpeg
+  --with-xpm
+  --with-freetype
+  --enable-mbstring
+  --enable-opcache
+  --enable-fpm
+  --enable-soap
+  --enable-static
+  --enable-sockets
+  --enable-inline-optimization
+  --disable-ipv6
+  --disable-debug
+  {{ php_source_configure_commands_static | default([]) | join(" ") }}

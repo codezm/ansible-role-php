@@ -1,0 +1,29 @@
+---
+# handlers file for php
+- name: enable php-fpm
+  service:
+    name: php-fpm
+    enabled: yes
+  notify:
+    - start php-fpm
+  when:
+    - _php_fpm_using_service == true
+
+- name: start php-fpm
+  service:
+    name: php-fpm
+    state: started
+
+- name: reload php-fpm
+  service:
+    name: php-fpm
+    state: reloaded
+  when:
+    - _php_fpm_using_service == true
+
+- name: restart php-fpm
+  service:
+    name: php-fpm
+    state: restarted
+  when:
+    - _php_fpm_using_service == true

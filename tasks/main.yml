@@ -1,0 +1,197 @@
+---
+# tasks file for php
+- name: Ensure dependencies for building from source are installed (RedHat).
+  package:
+    name:
+      - libtool
+      - bison
+      - make
+      - libxml2-devel
+      - openssl-devel
+      - sqlite-devel
+      - curl-devel
+      - libpng-devel
+      - oniguruma-devel
+      - libwebp-devel
+      - libjpeg-turbo-devel
+      - freetype-devel
+      - libXpm-devel
+    state: present
+
+- name: "handle package file"
+  include_role:
+    name: codezm.common
+    tasks_from: packages
+  vars:
+    packageInstallWay: "{{ _php_install_way }}"
+    packageName: "php-{{ _php_version }}.tar.gz"
+    unpackName: "php-{{ _php_version }}"
+    downloadUrl: "{{ _php_download_url }}"
+    downloadTimeout: "{{ __ansible_get_url_timeout }}"
+    savePath: "{{ __package_tmp_save_dir }}"
+
+- name: "static install php extensions"
+  include_tasks: static-extensions.yml
+  vars:
+    extension_name: "{{ _item }}"
+  loop_control:
+    loop_var: _item
+  with_items:
+    - "{{ _php_extensions_list.keys() | list }}"
+  when:
+    - _php_extensions_install_way == "static"
+
+- name: debug variables
+  debug:
+    msg:
+      - "{{ php_source_configure_commands_static | default([]) }}"
+      - "{{ php_configures_static | default([]) }}"
+
+- name: Build configure script.
+  command: >
+    ./buildconf --force
+    chdir={{ __package_tmp_save_dir }}php-{{ _php_version }}
+
+- name: Configure and build with php source.
+  command: >
+    {{ _php_source_configure_command }}
+    chdir={{ __package_tmp_save_dir }}php-{{ _php_version }}
+
+- name: Make and install PHP.
+  command: >
+    {{ item }}
+    chdir={{ __package_tmp_save_dir }}php-{{ _php_version }}
+  with_items:
+    - "{{ _php_source_make_command }}"
+    - make install
+  async: 1800
+  poll: 30
+
+- name: Ensure php executable is symlinked into a standard path.
+  file:
+    src: "{{ _php_source_install_path }}/bin/php"
+    dest: /usr/bin/php
+    state: link
+  when:
+    - _php_create_symlink == true
+
+- name: Copy the php configuration file
+  template:
+    src: php-{{ _php_version }}.ini.j2
+    dest: "{{ _php_conf_paths }}/php.ini"
+    owner: root
+    group: root
+    mode: 0644
+  tags:
+    - php.ini
+
+- name: Get php extensions dir.
+  shell: "{{ _php_source_install_path }}/bin/php-config --extension-dir"
+  register: result_extension_dir
+  tags:
+    - configure php.ini
+
+- name: Configurating extension_dir in php.ini file.
+  lineinfile:
+    dest: "{{ _php_conf_paths }}/php.ini"
+    line: |
+      extension_dir={{ result_extension_dir.stdout }}
+      {% for item in php_configures_static | default([])  %}
+      {{ item }}
+      {% endfor %}
+  tags:
+    - "configure php.ini"
+
+- name: Copy the php-fpm configuration file
+  template:
+    src: php-fpm.conf.j2
+    dest: "{{ _php_conf_paths }}/php-fpm.conf"
+    owner: root
+    group: root
+    mode: 0644
+  tags:
+    - php-fpm.conf
+
+- name: Copy the www configuration file
+  template:
+    src: www.conf.j2
+    dest: "{{ _php_conf_paths }}/php-fpm.d/www.conf"
+    owner: root
+    group: root
+    mode: 0644
+  tags:
+    - php-fpm.d/www.conf
+
+- name: Copy the php-fpm service file
+  template:
+    src: php-fpm.service.j2
+    dest: "/lib/systemd/system/php-fpm.service"
+    owner: root
+    group: root
+    mode: 0644
+  notify:
+    - enable php-fpm
+  when: _php_fpm_using_service == true
+  tags: [ php.service ]
+
+- name: Install composer the php packages manager.
+  command: >
+    {{ item }}
+    chdir={{ __package_tmp_save_dir }}
+  with_items:
+    - "{{ _php_source_install_path }}/bin/php -r \"copy('https://install.phpcomposer.com/installer', 'composer-setup.php');\""
+    - "{{ _php_source_install_path }}/bin/php composer-setup.php"
+    - "{{ _php_source_install_path }}/bin/php -r \"unlink('composer-setup.php');\""
+    - "mv composer.phar /usr/bin/composer"
+  when:
+    - _php_install_composer == true
+
+- name: Configurate composer mirror.
+  shell:
+    cmd: yes "y" | composer config -g repos.packagist composer https://mirrors.aliyun.com/composer/
+    chdir: "{{ __package_tmp_save_dir }}"
+  when:
+    - _php_install_composer == true
+
+- name: Get the php installed extension name
+  shell: php -m | grep -v "PHP Modules" | grep -v "Zend Modules" | tr '[A-Z]' '[a-z]' | tr '\n' ' '
+  register: php_installed_extensions
+  when:
+    - _php_extensions_force_update == false
+
+- name: Install php extensions
+  include_tasks: dynamic-extensions.yml
+  vars:
+    extension_name: "{{ _item }}"
+  loop_control:
+    loop_var: _item
+  with_items:
+    - "{{ _php_extensions_list.keys() | list }}"
+  when:
+    - _php_extensions_install_way == "dynamic" and
+      (
+        _php_extensions_force_update == true or
+        (
+          _php_extensions_force_update == false and _item not in php_installed_extensions['stdout']
+        ) or
+        (
+          _php_extensions_force_update != false and _php_extensions_force_update != true and _item not in _php_extensions_force_update
+        )
+      )
+  tags:
+    - "install php extension"
+
+- name: Clean source file
+  include_role:
+    name: codezm.common
+    tasks_from: clean
+  vars:
+    name: "{{ item.name }}"
+    path: "{{ item.path }}"
+  with_items:
+    - { name: "php-source-dir", path: "{{ __package_tmp_save_dir }}php-{{ _php_version }}" }
+    - { name: "php-compress-file", path: "{{ __package_tmp_save_dir }}php-{{ _php_version }}.tar.gz" }
+  when:
+    - __clean_origin_file == true
+  tags:
+    - clean

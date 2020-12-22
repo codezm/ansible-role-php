@@ -1,0 +1,27 @@
+- name: Install dependencies for {{ extension_name }}
+  package:
+    name: "{{ item }}"
+    state: present
+  with_items:
+    - "{{ _php_extensions_list[extension_name].depLibs }}"
+  when:
+    - _php_extensions_list[extension_name].depLibs is defined
+
+- name: "handle package file"
+  include_role:
+    name: codezm.common
+    tasks_from: packages
+  vars:
+    packageInstallWay: "{{ _php_extensions_source_code }}"
+    packageName: "{{ extension_name }}-{{ _php_extensions_list[extension_name].version }}.tgz"
+    unpackName: "{{ extension_name }}-{{ _php_extensions_list[extension_name].version }}"
+    downloadUrl: "https://pecl.php.net/get/{{ extension_name }}-{{ _php_extensions_list[extension_name].version }}.tgz"
+    downloadTimeout: "{{ __ansible_get_url_timeout }}"
+    savePath: "{{ __package_tmp_save_dir }}"
+
+- name: "Move to php source code ext directory"
+  command: creates="{{ __package_tmp_save_dir }}php-{{ _php_version }}/ext/{{ extension_name }}" mv "{{ __package_tmp_save_dir }}{{ extension_name }}-{{ _php_extensions_list[extension_name].version }}" "{{ __package_tmp_save_dir }}php-{{ _php_version }}/ext/{{ extension_name }}"
+
+- set_fact:
+    php_source_configure_commands_static: "{% if _php_extensions_list[extension_name].staticConfigurate is defined %}{{ php_source_configure_commands_static | default([]) + [_php_extensions_list[extension_name].staticConfigurate] }}{% else %}{% if _php_extensions_list[extension_name].depLibs is defined %}{{ php_source_configure_commands_static | default([]) + ['--with-' + extension_name] }}{% else %}{{ php_source_configure_commands_static | default([]) + ['--enable-' + extension_name] }}{% endif %} {% endif %}"
+    php_configures_static: "{{ php_configures_static | default([])  + ['[' + extension_name + ']'] + _php_extensions_list[extension_name].configures | default([]) }}"

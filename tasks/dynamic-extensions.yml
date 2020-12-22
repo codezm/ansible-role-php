@@ -1,0 +1,57 @@
+- name: Install dependencies for {{ extension_name }}
+  package:
+    name: "{{ item }}"
+    state: present
+  with_items:
+    - "{{ _php_extensions_list[extension_name].depLibs }}"
+  when:
+    - _php_extensions_list[extension_name].depLibs is defined
+
+- name: "handle package file"
+  include_role:
+    name: codezm.common
+    tasks_from: packages
+  vars:
+    packageInstallWay: "{{ _php_extensions_source_code }}"
+    packageName: "{{ extension_name }}-{{ _php_extensions_list[extension_name].version }}.tgz"
+    unpackName: "{{ extension_name }}-{{ _php_extensions_list[extension_name].version }}"
+    downloadUrl: "https://pecl.php.net/get/{{ extension_name }}-{{ _php_extensions_list[extension_name].version }}.tgz"
+    downloadTimeout: "{{ __ansible_get_url_timeout }}"
+    savePath: "{{ __package_tmp_save_dir }}"
+
+- name: Install php extension {{ extension_name }}.
+  command: >
+    {{ item }}
+    chdir={{ __package_tmp_save_dir }}{{ extension_name }}-{{ _php_extensions_list[extension_name].version }}
+  with_items:
+    - "{{ _php_source_install_path }}/bin/phpize"
+    - "./configure --with-php-config={{ _php_source_install_path }}/bin/php-config"
+    - "{{ _php_source_make_command }}"
+    - "make install"
+
+- name: Add {{ extension_name }} config to php.ini
+  lineinfile:
+    dest: "{{ _php_source_install_path }}/etc/php.ini"
+    line: |
+      [{{ extension_name }}]
+      extension={{ extension_name }}.so
+      {% if _php_extensions_list[extension_name].configures is defined %}
+      {% for item in _php_extensions_list[extension_name].configures %}
+      {{ item }}
+      {% endfor %}
+      {% endif %}
+
+- name: Clean source file
+  include_role:
+    name: codezm.common
+    tasks_from: clean
+  vars:
+    name: "{{ item.name }}"
+    path: "{{ item.path }}"
+  with_items:
+    - { name: "{{ extension_name }}-source-dir", path: "{{ __package_tmp_save_dir }}{{ extension_name }}-{{ _php_extensions_list[extension_name].version }}" }
+    - { name: "{{ extension_name }}-compress-file", path: "{{ __package_tmp_save_dir }}{{ extension_name }}-{{ _php_extensions_list[extension_name].version }}.tgz" }
+  when:
+    - __clean_origin_file == true
+  tags:
+    - clean
