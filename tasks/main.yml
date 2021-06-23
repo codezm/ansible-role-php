@@ -17,6 +17,27 @@
       - freetype-devel
       - libXpm-devel
     state: present
+  when: ansible_os_family == "CentOS"
+
+- name: Ensure dependencies for building from source are installed (RedHat).
+  package:
+    name:
+      - libtool
+      - bison
+      - make
+      - libxml2-dev
+      - libssl-dev
+      - libsqlite3-dev
+      - libcurl4-openssl-dev
+      - libpng-dev
+      - libonig-dev
+      - libwebp-dev
+      - libjpeg-dev
+      - libfreetype6-dev
+      - libxpm-dev
+      - pkg-config
+    state: present
+  when: ansible_os_family == "Debian"
 
 - name: "handle package file"
   include_role:
