@@ -202,6 +202,11 @@
   tags:
     - "install php extension"
 
+- name: Set workaround
+  set_fact:
+    # __sourcePath
+    sourcePath: "{{ role_path }}/files"
+
 - name: Clean source file
   include_role:
     name: codezm.common
@@ -209,6 +214,7 @@
   vars:
     name: "{{ item.name }}"
     path: "{{ item.path }}"
+    #sourcePath: "{{ __sourcePath }}"
   with_items:
     - { name: "php-source-dir", path: "{{ __package_tmp_save_dir }}php-{{ _php_version }}" }
     - { name: "php-compress-file", path: "{{ __package_tmp_save_dir }}php-{{ _php_version }}.tar.gz" }
